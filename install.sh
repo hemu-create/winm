@@ -23,4 +23,10 @@ Run the commands below only after a full backup and a tested recovery path.
 GUIDE
 
 echo
-exec python3 "$WORKDIR/winm_install.py" --workdir "$WORKDIR" interactive
+if [ -r /dev/tty ]; then
+  exec python3 "$WORKDIR/winm_install.py" --workdir "$WORKDIR" interactive </dev/tty
+fi
+
+echo "No interactive terminal found; running non-destructive checks only."
+python3 "$WORKDIR/winm_install.py" --workdir "$WORKDIR" check
+python3 "$WORKDIR/winm_install.py" --workdir "$WORKDIR" plan

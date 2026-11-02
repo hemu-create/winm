@@ -267,24 +267,95 @@ def cmd_disks(args: argparse.Namespace) -> int:
     return run_command(["lsblk", "-o", "NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE"])
 
 
-def cmd_interactive(args: argparse.Namespace) -> int:
-    print("WinM interactive installer (dry run)")
+def cmd_guide(args: argparse.Namespace) -> int:
+    print("WinM step guide")
+    print("===============")
     print()
-    if cmd_check(args) != 0:
-        print("host check failed; fix the issues above first")
-        return 1
+    print("1. Back up the Mac. Keep a second Mac or Apple Configurator for DFU recovery.")
+    print("2. Confirm macOS 13.5 or newer and Apple Silicon (arm64).")
+    print("3. Run the curl bootstrap:")
+    print("   curl -fsSL https://raw.githubusercontent.com/hemu-create/winm/master/install.sh | sh")
+    print("4. Review the detected model, disks, and partition plan.")
+    print("5. Confirm the APFS resize and ESP/NTFS partition commands.")
+    print("6. Download the b00t image into the work directory.")
+    print("7. Install m1n1 stage 1 as the custom boot object.")
+    print("8. Prepare Windows 11 ARM64 media with the official ISO or UUP.")
+    print("9. Apply the Windows image to the NTFS volume and create BCD entries.")
+    print("10. Reboot and select Windows. Use recoveryOS to remove the boot object.")
+    print()
+    print("Current automation covers checks, partitioning commands, and b00t download.")
+    print("Windows media, WIM apply, driver injection, and BCD remain guided steps.")
+    return 0
+
+
+def execute_commands(commands: list[list[str]], label: str) -> int:
+    for command in commands:
+        print("running: " + " ".join(command))
+        result = subprocess.run(command)
+        if result.returncode != 0:
+            print(f"command failed: {' '.join(command)}", file=sys.stderr)
+            return result.returncode
+    print(label + " complete")
+    return 0
+
+
+def cmd_interactive(args: argparse.Namespace) -> int:
+    print("Welcome to the WinM installer!")
+    print()
+    print("This wizard prepares an Apple Silicon Mac for Windows 11 ARM64.")
+    print("Nothing is changed until you explicitly confirm a step.")
+    print()
+
+    cmd_check(args)
     print()
     cmd_disks(args)
     print()
+
+    disk = input("Disk identifier [disk0]: ").strip() or "disk0"
+    container = input("macOS APFS container [disk0s2]: ").strip() or "disk0s2"
+    windows_size_text = input("Windows size in GiB [128]: ").strip() or "128"
+    esp_size_text = input("ESP size in MiB [512]: ").strip() or "512"
+
+    try:
+        windows_size = int(windows_size_text)
+        esp_size = int(esp_size_text)
+    except ValueError:
+        print("sizes must be integers", file=sys.stderr)
+        return 1
+
+    setattr(args, "disk", disk)
+    setattr(args, "container", container)
+    setattr(args, "windows_size", windows_size)
+    setattr(args, "esp_size", esp_size)
+    setattr(args, "execute", False)
+
+    print()
     cmd_partition_plan(args)
     print()
-    cmd_plan(args)
+
+    commands = build_partition_commands(disk, container, windows_size, esp_size)
+    print("Commands to run:")
+    for command in commands:
+        print("  " + " ".join(command))
     print()
-    answer = input("This is a dry run. Continue printing the plan only? [y/N] ").strip().lower()
-    if answer not in ("y", "yes"):
-        print("aborted")
-        return 1
-    print("No changes were made.")
+    answer = input("Type YES to execute the partition commands: ").strip()
+    if answer == "YES":
+        result = execute_commands(commands, "partitioning")
+        if result != 0:
+            return result
+    else:
+        print("Skipping partitioning.")
+
+    print()
+    setattr(args, "url", "")
+    setattr(args, "sha256", "43c842959a3bcba6b9ec1b52c6a1413d09f2e9a45997c07a312ee281a8dc6587")
+    setattr(args, "output", str(Path(args.workdir).expanduser() / "b00t.img"))
+    fetch_result = cmd_fetch_b00t(args)
+    if fetch_result != 0:
+        return fetch_result
+
+    print()
+    cmd_guide(args)
     return 0
 
 
@@ -438,8 +509,11 @@ def build_parser() -> argparse.ArgumentParser:
     disks = sub.add_parser("disks", help="list disks and partitions")
     disks.set_defaults(func=cmd_disks)
 
-    interactive = sub.add_parser("interactive", help="run a dry-run interactive session")
+    interactive = sub.add_parser("interactive", help="run the guided installer wizard")
     interactive.set_defaults(func=cmd_interactive)
+
+    guide = sub.add_parser("guide", help="print the step-by-step guide")
+    guide.set_defaults(func=cmd_guide)
 
     partition = sub.add_parser("partition-plan", help="print an APFS/ESP/NTFS partition plan")
     partition.add_argument("--windows-size", type=int, default=128)
