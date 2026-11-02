@@ -64,6 +64,15 @@ python3 ../tools/pad_b00t.py target/b00t.img
 The resulting `b00t.img` is an ARM64 Linux Image-compatible payload. m1n1 loads
 it at a 2 MiB-aligned address and enters it with the FDT in `x0`.
 
+## Quick start on macOS
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/hemu-create/winm/master/install.sh | sh
+```
+
+This downloads the installer scaffold and runs host checks only. It does not
+modify disks.
+
 ## Safety and recovery
 
 Installing a custom boot object changes how the machine boots and may require
