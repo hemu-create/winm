@@ -223,6 +223,30 @@ def cmd_recovery(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_b00t(args: argparse.Namespace) -> int:
+    url = args.url or "https://github.com/hemu-create/winm/releases/download/v0.1.0/b00t.img"
+    output = Path(args.output).expanduser()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256()
+
+    print(f"fetching {url}")
+    with urllib.request.urlopen(url) as response, output.open("wb") as handle:
+        while True:
+            chunk = response.read(1024 * 1024)
+            if not chunk:
+                break
+            handle.write(chunk)
+            digest.update(chunk)
+
+    actual = digest.hexdigest()
+    print(f"saved: {output}")
+    print(f"sha256: {actual}")
+    if args.sha256 and actual.lower() != args.sha256.lower():
+        print("sha256 mismatch", file=sys.stderr)
+        return 1
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="winm-install")
     parser.add_argument("--workdir", default="winm-work", help="working directory")
@@ -268,6 +292,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     recovery = sub.add_parser("recovery", help="show recovery instructions")
     recovery.set_defaults(func=cmd_recovery)
+
+    fetch = sub.add_parser("fetch-b00t", help="download the b00t image")
+    fetch.add_argument("--url", default="")
+    fetch.add_argument("--sha256", default="43c842959a3bcba6b9ec1b52c6a1413d09f2e9a45997c07a312ee281a8dc6587")
+    fetch.add_argument("--output", default="winm-work/b00t.img")
+    fetch.set_defaults(func=cmd_fetch_b00t)
 
     return parser
 
