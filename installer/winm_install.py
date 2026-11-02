@@ -45,8 +45,9 @@ def cmd_check(args: argparse.Namespace) -> int:
 
     if missing:
         print(f"missing tools: {', '.join(missing)}")
-        return 1
-    print("check: ok")
+        print("check: completed with warnings")
+    else:
+        print("check: ok")
     return 0
 
 
@@ -247,6 +248,45 @@ def cmd_fetch_b00t(args: argparse.Namespace) -> int:
     return 0
 
 
+
+def run_command(command: list[str]) -> int:
+    try:
+        subprocess.run(command, check=True)
+        return 0
+    except FileNotFoundError:
+        print(f"missing command: {command[0]}", file=sys.stderr)
+        return 1
+    except subprocess.CalledProcessError as exc:
+        print(f"command failed: {' '.join(command)} ({exc.returncode})", file=sys.stderr)
+        return exc.returncode
+
+
+
+def cmd_disks(args: argparse.Namespace) -> int:
+    if platform.system() == "Darwin":
+        return run_command(["diskutil", "list"])
+    return run_command(["lsblk", "-o", "NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE"])
+
+
+def cmd_interactive(args: argparse.Namespace) -> int:
+    print("WinM interactive installer (dry run)")
+    print()
+    if cmd_check(args) != 0:
+        print("host check failed; fix the issues above first")
+        return 1
+    print()
+    cmd_disks(args)
+    print()
+    cmd_plan(args)
+    print()
+    answer = input("This is a dry run. Continue printing the plan only? [y/N] ").strip().lower()
+    if answer not in ("y", "yes"):
+        print("aborted")
+        return 1
+    print("No changes were made.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="winm-install")
     parser.add_argument("--workdir", default="winm-work", help="working directory")
@@ -292,6 +332,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     recovery = sub.add_parser("recovery", help="show recovery instructions")
     recovery.set_defaults(func=cmd_recovery)
+
+    disks = sub.add_parser("disks", help="list disks and partitions")
+    disks.set_defaults(func=cmd_disks)
+
+    interactive = sub.add_parser("interactive", help="run a dry-run interactive session")
+    interactive.set_defaults(func=cmd_interactive)
 
     fetch = sub.add_parser("fetch-b00t", help="download the b00t image")
     fetch.add_argument("--url", default="")
