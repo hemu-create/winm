@@ -11,3 +11,5 @@ __pycache__/
 *.vhdx
 *.qcow2
 .DS_Store
+
+/asahi-fwextract/
