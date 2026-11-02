@@ -1,0 +1,35 @@
+[Version]
+Signature="$WINDOWS NT$"
+Class=System
+ClassGuid={4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider=%Provider%
+DriverVer=11/02/2026,0.1.0.0
+CatalogFile=aic.cat
+
+[Manufacturer]
+%Provider%=Standard,NTARM64
+
+[Standard.NTARM64]
+%AicDevice%=Aic_Install,ACPI\APLC0001
+
+[Aic_Install.NT]
+CopyFiles=Aic_CopyFiles
+
+[Aic_Install.NT.Services]
+AddService=aic,%SPSVCINST_ASSOCSERVICE%,Aic_Service
+
+[Aic_Service]
+DisplayName=%AicService%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\aic.sys
+
+[Aic_CopyFiles]
+aic.sys
+
+[Strings]
+Provider="WinM"
+AicDevice="Apple Interrupt Controller"
+AicService="WinM AIC Driver"
+SPSVCINST_ASSOCSERVICE=0x00000002

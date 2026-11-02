@@ -1,0 +1,13 @@
+/target/
+/out/
+__pycache__/
+*.pyc
+*.img
+*.bin
+*.iso
+*.wim
+*.esd
+*.vhd
+*.vhdx
+*.qcow2
+.DS_Store

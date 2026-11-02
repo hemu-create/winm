@@ -1,0 +1,42 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  b00t:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-none-softfloat
+      - name: Install LLVM
+        run: sudo apt-get update && sudo apt-get install -y lld llvm
+      - name: Build b00t
+        run: |
+          cd b00t
+          cargo build --release
+          llvm-objcopy -O binary target/aarch64-unknown-none-softfloat/release/b00t target/b00t.img
+          python3 ../tools/pad_b00t.py target/b00t.img
+      - name: Check b00t
+        run: |
+          cd b00t
+          cargo fmt --check
+          cargo clippy --release -- -D warnings
+      - name: Check Python
+        run: python3 -m compileall installer tools
+
+  driver-skeletons:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile C skeletons
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path drivers -Recurse -Filter *.c
+          foreach ($file in $files) {
+            cl /nologo /W4 /c $file.FullName /Fo"$env:TEMP\$($file.BaseName).obj"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }

@@ -1,0 +1,282 @@
+#!/usr/bin/env python3
+import argparse
+import hashlib
+import subprocess
+import platform
+import shutil
+import sys
+import urllib.request
+from pathlib import Path
+
+TOOLS_MACOS = ["kmutil", "diskutil", "hdiutil", "asr"]
+TOOLS_IMAGE = ["wimlib-imagex", "mkfs.ntfs", "ntfs-3g"]
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    print(f"platform: {platform.system()} {platform.release()} {platform.machine()}")
+    print(f"python: {platform.python_version()}")
+
+    tools = TOOLS_MACOS if platform.system() == "Darwin" else TOOLS_IMAGE
+    missing = []
+    for tool in tools:
+        path = shutil.which(tool)
+        print(f"{tool}: {path or 'missing'}")
+        if path is None:
+            missing.append(tool)
+
+    if platform.system() == "Darwin":
+        try:
+            import subprocess
+
+            model = subprocess.check_output(
+                ["sysctl", "-n", "hw.model"], text=True
+            ).strip()
+            print(f"model: {model}")
+        except Exception as exc:
+            print(f"model: unknown ({exc})")
+
+    root = Path(args.workdir).expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    usage = shutil.disk_usage(root)
+    print(f"workdir: {root}")
+    print(f"free: {usage.free // (1024**3)} GiB")
+    if usage.free < 64 * 1024**3:
+        print("warning: less than 64 GiB free; a Windows install needs more")
+
+    if missing:
+        print(f"missing tools: {', '.join(missing)}")
+        return 1
+    print("check: ok")
+    return 0
+
+
+def cmd_plan(args: argparse.Namespace) -> int:
+    print("WinM installation plan")
+    print("  target: Apple Silicon Mac, base M3 Air (t8122) first")
+    print("  boot: m1n1 stage 1 -> m1n1 stage 2 -> b00t -> EDK2 -> Windows")
+    print("  disk: APFS resize -> EFI System Partition -> NTFS Windows volume")
+    print("  media: official Windows 11 ARM64 ISO or local UUP build")
+    print("  drivers: WinM test drivers, test signing during development")
+    print("  recovery: remove custom boot object, restore macOS boot policy")
+    print()
+    print("This command is a dry run. It does not modify disks.")
+    print("Phase 1/2 installer implementation is not complete.")
+    return 0
+
+
+def cmd_download(args: argparse.Namespace) -> int:
+    if not args.url.startswith("https://"):
+        print("refusing non-HTTPS URL", file=sys.stderr)
+        return 1
+
+    output = Path(args.output).expanduser()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256()
+
+    with urllib.request.urlopen(args.url) as response, output.open("wb") as handle:
+        while True:
+            chunk = response.read(1024 * 1024)
+            if not chunk:
+                break
+            handle.write(chunk)
+            digest.update(chunk)
+
+    actual = digest.hexdigest()
+    print(f"downloaded: {output}")
+    print(f"sha256: {actual}")
+    if args.sha256 and actual.lower() != args.sha256.lower():
+        print("sha256 mismatch", file=sys.stderr)
+        return 1
+    return 0
+
+
+def find_wims(root: Path) -> list[Path]:
+    return sorted(root.rglob("*.wim"))
+
+
+def cmd_prepare(args: argparse.Namespace) -> int:
+    iso = Path(args.iso).expanduser()
+    if not iso.exists():
+        print(f"ISO not found: {iso}", file=sys.stderr)
+        return 1
+
+    output = Path(args.output).expanduser()
+    output.mkdir(parents=True, exist_ok=True)
+    print(f"ISO: {iso}")
+    print(f"output: {output}")
+
+    if shutil.which("7z") is not None:
+        try:
+            listing = subprocess.check_output(["7z", "l", str(iso)], text=True)
+            wims = [line for line in listing.splitlines() if ".wim" in line.lower()]
+            print(f"WIM entries found: {len(wims)}")
+            for line in wims[:20]:
+                print(f"  {line.strip()}")
+        except Exception as exc:
+            print(f"7z listing failed: {exc}")
+    else:
+        print("7z is not installed; cannot inspect ISO contents")
+
+    if shutil.which("wimlib-imagex") is not None:
+        for wim in find_wims(output):
+            print(f"inspecting {wim}")
+            try:
+                info = subprocess.check_output(
+                    ["wimlib-imagex", "info", str(wim)], text=True
+                )
+                print(info[:1000])
+            except Exception as exc:
+                print(f"wimlib info failed: {exc}")
+    else:
+        print("wimlib-imagex is not installed; WIM inspection skipped")
+
+    print("prepare: scaffold only; extraction and patching are not implemented")
+    print("next: extract sources/boot.wim and sources/install.wim, then patch WinPE")
+    return 0
+
+
+def cmd_inspect(args: argparse.Namespace) -> int:
+    iso = Path(args.iso).expanduser()
+    if not iso.exists():
+        print(f"ISO not found: {iso}", file=sys.stderr)
+        return 1
+    if shutil.which("7z") is None:
+        print("7z is required to inspect ISO contents", file=sys.stderr)
+        return 1
+    listing = subprocess.check_output(["7z", "l", str(iso)], text=True)
+    print(listing)
+    return 0
+
+
+def cmd_unattend(args: argparse.Namespace) -> int:
+    output = Path(args.output).expanduser()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    content = """<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+  <settings pass="windowsPE">
+    <component name="Microsoft-Windows-Setup" processorArchitecture="arm64"
+               publicKeyToken="31bf3856ad364e35" language="neutral"
+               versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <UserData>
+        <AcceptEula>true</AcceptEula>
+      </UserData>
+    </component>
+  </settings>
+  <settings pass="oobeSystem">
+    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="arm64"
+               publicKeyToken="31bf3856ad364e35" language="neutral"
+               versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+        <SkipMachineOOBE>true</SkipMachineOOBE>
+        <SkipUserOOBE>true</SkipUserOOBE>
+      </OOBE>
+    </component>
+  </settings>
+</unattend>
+"""
+    output.write_text(content)
+    print(f"wrote {output}")
+    print("Note: LabConfig bypass keys must also be written to the boot.wim WinPE registry.")
+    return 0
+
+
+def cmd_testsign(args: argparse.Namespace) -> int:
+    if args.state == "on":
+        print("bcdedit /set testsigning on")
+        print("bcdedit /set nointegritychecks on")
+    else:
+        print("bcdedit /set testsigning off")
+        print("bcdedit /set nointegritychecks off")
+    print("These commands are for development only and weaken platform security.")
+    return 0
+
+
+def cmd_bcd(args: argparse.Namespace) -> int:
+    print("Create BCD entries from a Windows installation:")
+    print("  bcdboot W:\\Windows /s S: /f UEFI")
+    print("  bcdedit /store S:\\EFI\\Microsoft\\Boot\\BCD /set {default} testsigning on")
+    print("  bcdedit /store S:\\EFI\\Microsoft\\Boot\\BCD /set {default} nointegritychecks on")
+    print("Run these inside a disposable Windows VM or WinPE; do not run on the host.")
+    return 0
+
+
+def cmd_install(args: argparse.Namespace) -> int:
+    print("install: not implemented", file=sys.stderr)
+    print("This command must not modify disks until APFS resize and recovery are tested.", file=sys.stderr)
+    return 1
+
+
+def cmd_uninstall(args: argparse.Namespace) -> int:
+    print("uninstall: not implemented", file=sys.stderr)
+    print("Planned: remove the custom boot object, delete WinM partitions, restore macOS boot.", file=sys.stderr)
+    return 1
+
+
+def cmd_recovery(args: argparse.Namespace) -> int:
+    print("recovery instructions")
+    print("1. Boot into macOS recoveryOS.")
+    print("2. Remove the m1n1 custom boot object.")
+    print("3. Restore the macOS startup disk and security policy.")
+    print("4. Keep a second Mac or Apple Configurator available for DFU recovery.")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="winm-install")
+    parser.add_argument("--workdir", default="winm-work", help="working directory")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    check = sub.add_parser("check", help="check host and tools")
+    check.set_defaults(func=cmd_check)
+
+    plan = sub.add_parser("plan", help="show a dry-run installation plan")
+    plan.set_defaults(func=cmd_plan)
+
+    download = sub.add_parser("download", help="download and verify an ISO")
+    download.add_argument("--url", required=True)
+    download.add_argument("--sha256", default="")
+    download.add_argument("--output", required=True)
+    download.set_defaults(func=cmd_download)
+
+    prepare = sub.add_parser("prepare", help="inspect and prepare Windows media")
+    prepare.add_argument("--iso", required=True)
+    prepare.add_argument("--output", default="winm-work/media")
+    prepare.set_defaults(func=cmd_prepare)
+
+    inspect = sub.add_parser("inspect", help="list ISO contents")
+    inspect.add_argument("--iso", required=True)
+    inspect.set_defaults(func=cmd_inspect)
+
+    unattend = sub.add_parser("unattend", help="generate a minimal unattend.xml")
+    unattend.add_argument("--output", required=True)
+    unattend.set_defaults(func=cmd_unattend)
+
+    testsign = sub.add_parser("testsign", help="print test-signing BCD commands")
+    testsign.add_argument("state", choices=["on", "off"])
+    testsign.set_defaults(func=cmd_testsign)
+
+    bcd = sub.add_parser("bcd", help="print BCD creation commands")
+    bcd.set_defaults(func=cmd_bcd)
+
+    install = sub.add_parser("install", help="install WinM (not implemented)")
+    install.set_defaults(func=cmd_install)
+
+    uninstall = sub.add_parser("uninstall", help="remove WinM (not implemented)")
+    uninstall.set_defaults(func=cmd_uninstall)
+
+    recovery = sub.add_parser("recovery", help="show recovery instructions")
+    recovery.set_defaults(func=cmd_recovery)
+
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

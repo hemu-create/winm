@@ -1,0 +1,12 @@
+[build]
+target = "aarch64-unknown-none-softfloat"
+
+[target.aarch64-unknown-none-softfloat]
+rustflags = [
+    "-C", "linker=ld.lld",
+    "-C", "relocation-model=pic",
+    "-C", "link-arg=--gc-sections",
+    "-C", "link-arg=--build-id=none",
+    "-C", "link-arg=-zmax-page-size=4096",
+    "-C", "link-arg=-nostdlib",
+]

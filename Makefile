@@ -1,0 +1,15 @@
+.PHONY: b00t clean check
+
+b00t:
+	cd b00t && cargo build --release
+	llvm-objcopy -O binary b00t/target/aarch64-unknown-none-softfloat/release/b00t b00t/target/b00t.img
+	python3 tools/pad_b00t.py b00t/target/b00t.img
+
+check:
+	cd b00t && cargo fmt --check && cargo clippy --release -- -D warnings
+	python3 -m py_compile installer/winm_install.py tools/*.py
+
+clean:
+	rm -rf b00t/target
+	find . -name '__pycache__' -type d -prune -exec rm -rf {} +
+	find . -name '*.pyc' -delete
