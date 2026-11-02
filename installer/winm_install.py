@@ -61,7 +61,6 @@ def cmd_plan(args: argparse.Namespace) -> int:
     print("  recovery: remove custom boot object, restore macOS boot policy")
     print()
     print("This command is a dry run. It does not modify disks.")
-    print("Phase 1/2 installer implementation is not complete.")
     return 0
 
 
@@ -277,6 +276,8 @@ def cmd_interactive(args: argparse.Namespace) -> int:
     print()
     cmd_disks(args)
     print()
+    cmd_partition_plan(args)
+    print()
     cmd_plan(args)
     print()
     answer = input("This is a dry run. Continue printing the plan only? [y/N] ").strip().lower()
@@ -284,6 +285,67 @@ def cmd_interactive(args: argparse.Namespace) -> int:
         print("aborted")
         return 1
     print("No changes were made.")
+    return 0
+
+
+
+def cmd_partition_plan(args: argparse.Namespace) -> int:
+    windows_size = getattr(args, "windows_size", 128)
+    esp_size = getattr(args, "esp_size", 512)
+    print("Partition plan (dry run; review before running):")
+    print()
+    print("1. Identify the target disk:")
+    print("   diskutil list")
+    print()
+    print("2. Resize the macOS APFS container (example):")
+    print("   diskutil apfs resizeContainer disk0s2 250g")
+    print()
+    print("3. Create an EFI System Partition:")
+    print(f"   diskutil addPartition disk0 1 'EFI System Partition' FAT32 WINM_ESP {esp_size}m")
+    print()
+    print("4. Create a Windows NTFS partition:")
+    print(f"   diskutil addPartition disk0 2 'Microsoft Basic Data' NTFS WINM_WINDOWS {windows_size}g")
+    print()
+    print("5. Format and verify:")
+    print("   diskutil info WINM_ESP")
+    print("   diskutil info WINM_WINDOWS")
+    print()
+    print("Replace disk identifiers and sizes with values from 'diskutil list'.")
+    print("Never run these commands without a full backup.")
+    return 0
+
+
+
+def build_partition_commands(disk: str, container: str, windows_size: int, esp_size: int) -> list[list[str]]:
+    return [
+        ["diskutil", "apfs", "resizeContainer", container, "250g"],
+        ["diskutil", "addPartition", disk, "1", "EFI System Partition", "FAT32", "WINM_ESP", f"{esp_size}m"],
+        ["diskutil", "addPartition", disk, "2", "Microsoft Basic Data", "NTFS", "WINM_WINDOWS", f"{windows_size}g"],
+    ]
+
+
+def cmd_partition(args: argparse.Namespace) -> int:
+    commands = build_partition_commands(args.disk, args.container, args.windows_size, args.esp_size)
+    print("Partition commands:")
+    for command in commands:
+        print("  " + " ".join(command))
+    print()
+    if not args.execute:
+        print("Dry run only. Re-run with --execute after reviewing the commands.")
+        return 0
+
+    confirm = input("Type YES to execute the partition commands: ").strip()
+    if confirm != "YES":
+        print("aborted")
+        return 1
+
+    for command in commands:
+        print("running: " + " ".join(command))
+        result = subprocess.run(command)
+        if result.returncode != 0:
+            print(f"command failed: {' '.join(command)}", file=sys.stderr)
+            return result.returncode
+    print("partitioning complete")
     return 0
 
 
@@ -338,6 +400,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     interactive = sub.add_parser("interactive", help="run a dry-run interactive session")
     interactive.set_defaults(func=cmd_interactive)
+
+    partition = sub.add_parser("partition-plan", help="print an APFS/ESP/NTFS partition plan")
+    partition.add_argument("--windows-size", type=int, default=128)
+    partition.add_argument("--esp-size", type=int, default=512)
+    partition.set_defaults(func=cmd_partition_plan)
+
+    partition = sub.add_parser("partition", help="create WinM partitions")
+    partition.add_argument("--disk", default="disk0")
+    partition.add_argument("--container", default="disk0s2")
+    partition.add_argument("--windows-size", type=int, default=128)
+    partition.add_argument("--esp-size", type=int, default=512)
+    partition.add_argument("--execute", action="store_true")
+    partition.set_defaults(func=cmd_partition)
 
     fetch = sub.add_parser("fetch-b00t", help="download the b00t image")
     fetch.add_argument("--url", default="")
