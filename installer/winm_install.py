@@ -349,6 +349,46 @@ def cmd_partition(args: argparse.Namespace) -> int:
     return 0
 
 
+
+def cmd_apply_wim(args: argparse.Namespace) -> int:
+    wim = Path(args.wim).expanduser()
+    target = Path(args.target).expanduser()
+    if not wim.exists():
+        print(f"WIM not found: {wim}", file=sys.stderr)
+        return 1
+    if shutil.which("wimlib-imagex") is None:
+        print("wimlib-imagex is required", file=sys.stderr)
+        return 1
+
+    command = ["wimlib-imagex", "apply", str(wim), str(args.image), str(target)]
+    print("command: " + " ".join(command))
+    if not args.execute:
+        print("dry run only; re-run with --execute")
+        return 0
+
+    confirm = input("Type YES to apply the WIM: ").strip()
+    if confirm != "YES":
+        print("aborted")
+        return 1
+    target.mkdir(parents=True, exist_ok=True)
+    return subprocess.run(command).returncode
+
+
+def cmd_format_ntfs(args: argparse.Namespace) -> int:
+    device = args.device
+    command = ["mkfs.ntfs", "-f", "-L", args.label, device]
+    print("command: " + " ".join(command))
+    if not args.execute:
+        print("dry run only; re-run with --execute")
+        return 0
+
+    confirm = input(f"Type YES to format {device} as NTFS: ").strip()
+    if confirm != "YES":
+        print("aborted")
+        return 1
+    return subprocess.run(command).returncode
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="winm-install")
     parser.add_argument("--workdir", default="winm-work", help="working directory")
@@ -413,6 +453,19 @@ def build_parser() -> argparse.ArgumentParser:
     partition.add_argument("--esp-size", type=int, default=512)
     partition.add_argument("--execute", action="store_true")
     partition.set_defaults(func=cmd_partition)
+
+    apply_wim = sub.add_parser("apply-wim", help="apply a WIM to a target directory")
+    apply_wim.add_argument("--wim", required=True)
+    apply_wim.add_argument("--image", type=int, default=1)
+    apply_wim.add_argument("--target", required=True)
+    apply_wim.add_argument("--execute", action="store_true")
+    apply_wim.set_defaults(func=cmd_apply_wim)
+
+    format_ntfs = sub.add_parser("format-ntfs", help="format a device as NTFS")
+    format_ntfs.add_argument("--device", required=True)
+    format_ntfs.add_argument("--label", default="WINM_WINDOWS")
+    format_ntfs.add_argument("--execute", action="store_true")
+    format_ntfs.set_defaults(func=cmd_format_ntfs)
 
     fetch = sub.add_parser("fetch-b00t", help="download the b00t image")
     fetch.add_argument("--url", default="")
