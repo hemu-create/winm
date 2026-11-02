@@ -27,6 +27,11 @@ jobs:
           cargo clippy --release -- -D warnings
       - name: Check Python
         run: python3 -m compileall installer tools
+      - name: Upload b00t image
+        uses: actions/upload-artifact@v4
+        with:
+          name: b00t.img
+          path: b00t/target/b00t.img
 
   driver-skeletons:
     runs-on: windows-latest
