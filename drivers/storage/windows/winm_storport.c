@@ -47,10 +47,10 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
 
     RtlZeroMemory(&InitData, sizeof(InitData));
     InitData.HwInitializationDataSize = sizeof(HW_INITIALIZATION_DATA);
-    InitData.HwFindAdapter = HwFindAdapter;
-    InitData.HwInitialize = HwInitialize;
-    InitData.HwStartIo = HwStartIo;
-    InitData.HwInterrupt = HwInterrupt;
+    InitData.HwFindAdapter = (PHW_FIND_ADAPTER)HwFindAdapter;
+    InitData.HwInitialize = (PHW_INITIALIZE)HwInitialize;
+    InitData.HwStartIo = (PHW_STARTIO)HwStartIo;
+    InitData.HwInterrupt = (PHW_INTERRUPT)HwInterrupt;
     InitData.DeviceExtensionSize = sizeof(DEVICE_EXTENSION);
     InitData.SrbExtensionSize = 0;
     InitData.NumberOfAccessRanges = 1;
