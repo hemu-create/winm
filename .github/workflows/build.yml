@@ -48,7 +48,7 @@ jobs:
         shell: pwsh
         run: |
           $files = Get-ChildItem -Path drivers -Recurse -Filter *.c |
-            Where-Object { $_.FullName -notmatch '\\drivers\\nvme\\windows\\' }
+            Where-Object { $_.FullName -notmatch '\\drivers\\(nvme|storage)\\windows\\' }
           foreach ($file in $files) {
             cl /nologo /W4 /c $file.FullName /Fo"$env:TEMP\$($file.BaseName).obj"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -104,3 +104,32 @@ jobs:
             drivers/nvme/windows/bin/ARM64/Release/**/*.sys
             drivers/nvme/windows/bin/ARM64/Release/**/*.inf
             drivers/nvme/windows/bin/ARM64/Release/**/*.cat
+
+  wdk-storport:
+    runs-on: windows-2025-vs2026
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore WDK NuGet packages
+        shell: pwsh
+        run: nuget restore packages.config -PackagesDirectory packages
+      - name: Build WinM Storport miniport
+        shell: pwsh
+        run: |
+          $wdkBin = "D:/a/winm/winm/packages/Microsoft.Windows.WDK.arm64.10.0.28000.2526/c/bin/10.0.28000.0"
+          $infToolPath = $wdkBin + "/x64/"
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
+          if (!$msbuild) { throw "MSBuild not found" }
+          & $msbuild drivers/storage/windows/winm_storport.vcxproj `
+            /p:Configuration=Release `
+            /p:Platform=ARM64 `
+            /p:InfToolPath=$infToolPath `
+            /p:InfToolArchitecture=Native64Bit `
+            /m
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload WinM Storport driver
+        uses: actions/upload-artifact@v4
+        with:
+          name: winm-storport-driver
+          path: |
+            drivers/storage/windows/bin/ARM64/Release/**/*.sys
