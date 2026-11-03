@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stddef.h>
+#include "../common/apple_registers.h"
 
 typedef struct {
     uintptr_t ecam_base;
@@ -16,6 +17,13 @@ int pcie_init(pcie_context_t *context, uintptr_t ecam_base, uint32_t segment) {
     context->segment = segment;
     context->bus_count = 256;
     return 0;
+}
+
+uint32_t pcie_link_status(pcie_context_t *context) {
+    if (context == NULL || context->ecam_base == 0) {
+        return 0;
+    }
+    return *(volatile uint32_t *)(context->ecam_base + PCIE_PORT_LINKSTS);
 }
 
 uint32_t pcie_read_config(pcie_context_t *context, uint32_t bus, uint32_t device,
