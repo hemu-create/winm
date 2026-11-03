@@ -24,11 +24,11 @@ int aic_init(aic_context_t *context, uintptr_t base) {
     }
 
     context->base = base;
-    context->version = read32(base + AIC_CONFIG) & 0x0000000fu;
+    context->version = 1;
     context->nr_irq = read32(base + AIC_INFO) & AIC_INFO_NR_IRQ;
     context->max_irq = 0x400;
 
-    for (uint32_t index = 0; index < (0x400u / 32u); index++) {
+    for (uint32_t index = 0; index < (context->max_irq / 32u); index++) {
         write32(base + AIC_MASK_SET + index * 4u, 0xffffffffu);
     }
 
@@ -40,4 +40,30 @@ uint32_t aic_acknowledge(aic_context_t *context) {
         return 0;
     }
     return read32(context->base + AIC_EVENT);
+}
+
+int aic_mask_irq(aic_context_t *context, uint32_t irq) {
+    if (context == NULL || context->base == 0 || irq >= context->max_irq) {
+        return -1;
+    }
+    write32(context->base + AIC_MASK_SET + (irq / 32u) * 4u,
+            1u << (irq & 31u));
+    return 0;
+}
+
+int aic_unmask_irq(aic_context_t *context, uint32_t irq) {
+    if (context == NULL || context->base == 0 || irq >= context->max_irq) {
+        return -1;
+    }
+    write32(context->base + AIC_MASK_CLR + (irq / 32u) * 4u,
+            1u << (irq & 31u));
+    return 0;
+}
+
+uint32_t aic_event_type(uint32_t event) {
+    return (event & AIC_EVENT_TYPE) >> 16;
+}
+
+uint32_t aic_event_number(uint32_t event) {
+    return event & AIC_EVENT_NUM;
 }

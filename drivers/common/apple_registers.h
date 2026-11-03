@@ -7,6 +7,8 @@
 #define AIC_CONFIG 0x0010u
 #define AIC_WHOAMI 0x2000u
 #define AIC_EVENT 0x2004u
+#define AIC_EVENT_TYPE 0x00ff0000u
+#define AIC_EVENT_NUM 0x0000ffffu
 #define AIC_IPI_SEND 0x2008u
 #define AIC_IPI_ACK 0x200cu
 #define AIC_IPI_MASK_SET 0x2024u
