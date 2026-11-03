@@ -1,3 +1,4 @@
+#include <ntddk.h>
 #include <storport.h>
 
 typedef struct _DEVICE_EXTENSION {
