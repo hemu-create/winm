@@ -55,28 +55,21 @@ jobs:
           }
 
   wdk-driver:
-    runs-on: windows-2022
+    runs-on: windows-2025-vs2026
     steps:
       - uses: actions/checkout@v4
-      - name: Verify WDK
+      - name: Restore WDK NuGet packages
         shell: pwsh
-        run: |
-          $wdk = "C:\Program Files (x86)\Windows Kits\10"
-          if (!(Test-Path "$wdk\build\WindowsDriver.Common.targets")) {
-            throw "WDK not found at $wdk"
-          }
-          Write-Host "Using WDK: $wdk"
+        run: nuget restore packages.config -PackagesDirectory packages
       - name: Build WinM NVMe KMDF driver
         shell: pwsh
         run: |
-          $wdk = "C:\Program Files (x86)\Windows Kits\10"
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $msbuild = & $vswhere -latest -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
           if (!$msbuild) { throw "MSBuild not found" }
           & $msbuild drivers\nvme\windows\winm_nvme.vcxproj `
             /p:Configuration=Release `
             /p:Platform=ARM64 `
-            /p:WDKContentRoot=$wdk `
             /m
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload WinM NVMe driver
