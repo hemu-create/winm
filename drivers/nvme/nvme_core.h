@@ -66,9 +66,38 @@ typedef struct _NVME_CONTROLLER {
     uint32_t doorbell_stride;
 } NVME_CONTROLLER;
 
+#define NVME_ADMIN_SQ_ENTRY_DWORDS 16u
+#define NVME_ADMIN_CQ_ENTRY_DWORDS 16u
+
+typedef struct _NVME_ADMIN_QUEUE {
+    volatile uint32_t *sq;
+    volatile uint32_t *cq;
+    uint32_t sq_depth;
+    uint32_t cq_depth;
+    uint16_t sq_tail;
+    uint16_t cq_head;
+    uint16_t next_command_id;
+    uint8_t phase;
+} NVME_ADMIN_QUEUE;
+
 int nvme_core_probe(NVME_CONTROLLER *controller, const NVME_MMIO *mmio);
 int nvme_core_wait_ready(NVME_CONTROLLER *controller, int ready);
 int nvme_core_reset(NVME_CONTROLLER *controller);
 int nvme_core_enable(NVME_CONTROLLER *controller, uint64_t asq, uint64_t acq,
                      uint32_t sq_depth, uint32_t cq_depth);
 int nvme_core_shutdown(NVME_CONTROLLER *controller);
+
+int nvme_core_admin_queue_init(NVME_CONTROLLER *controller,
+                               NVME_ADMIN_QUEUE *queue,
+                               volatile uint32_t *sq, volatile uint32_t *cq,
+                               uint32_t sq_depth, uint32_t cq_depth);
+int nvme_core_admin_submit(NVME_CONTROLLER *controller,
+                           NVME_ADMIN_QUEUE *queue, uint8_t opcode,
+                           uint32_t nsid, uint64_t prp1, uint32_t cdw10,
+                           uint32_t cdw11, uint16_t *command_id);
+int nvme_core_admin_poll(NVME_CONTROLLER *controller,
+                         NVME_ADMIN_QUEUE *queue, uint16_t *command_id,
+                         uint32_t *status_code);
+int nvme_core_identify_controller(NVME_CONTROLLER *controller,
+                                 NVME_ADMIN_QUEUE *queue, uint64_t prp1,
+                                 uint16_t *command_id);

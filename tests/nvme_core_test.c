@@ -95,6 +95,49 @@ int main(void) {
     memcpy(fake.registers + NVME_REG_CSTS, &(uint32_t){NVME_CSTS_CFS}, sizeof(uint32_t));
     check(nvme_core_wait_ready(&controller, 1) == -1, "controller fatal status");
 
+    {
+        volatile uint32_t sq[2 * NVME_ADMIN_SQ_ENTRY_DWORDS];
+        volatile uint32_t cq[2 * NVME_ADMIN_CQ_ENTRY_DWORDS];
+        NVME_ADMIN_QUEUE queue;
+        uint16_t cid = 0;
+        uint32_t status = 0;
+        int complete;
+
+        check(nvme_core_admin_queue_init(&controller, &queue, sq, cq, 2, 2) == 0,
+              "admin queue init");
+        check(queue.phase == 1, "admin queue phase");
+
+        check(nvme_core_identify_controller(&controller, &queue, 0x4000, &cid) == 0,
+              "identify submit");
+        check(cid == 1, "identify command id");
+        check(sq[0] == (0x06u | (1u << 16)), "identify opcode/cid");
+        check(sq[6] == 0x4000u, "identify PRP low");
+        check(sq[10] == 1u, "identify CNS");
+        check(fake_read32(&fake, NVME_REG_DBS) == 1u, "SQ doorbell");
+
+        cq[3] = 2u | (1u << 16);
+        complete = nvme_core_admin_poll(&controller, &queue, &cid, &status);
+        check(complete == 1, "admin poll complete");
+        check(cid == 2, "completion cid");
+        check(status == 0, "completion status");
+        check(fake_read32(&fake, NVME_REG_DBS + 4) == 1u, "CQ doorbell");
+        check(queue.phase == 1, "phase unchanged");
+
+        cq[16 + 3] = 3u | (1u << 16);
+        complete = nvme_core_admin_poll(&controller, &queue, &cid, &status);
+        check(complete == 1, "admin poll wrap complete");
+        check(cid == 3, "wrapped completion cid");
+        check(queue.cq_head == 0, "queue head wrapped");
+        check(queue.phase == 0, "phase toggled on wrap");
+
+        cq[3] = 4u | (1u << 16);
+        complete = nvme_core_admin_poll(&controller, &queue, &cid, &status);
+        check(complete == 0, "old phase not complete");
+
+        check(nvme_core_admin_queue_init(NULL, &queue, sq, cq, 2, 2) == -1,
+              "null controller queue init");
+    }
+
     if (failures != 0) {
         printf("%d failure(s)\n", failures);
         return 1;
