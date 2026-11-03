@@ -16,6 +16,8 @@ service.
 - PRP lists and DMA buffers must respect the DART granule.
 - The shared `drivers/common/winm_dma.*` helpers provide 16 KiB-aligned
   allocations and detect when a Windows 4 KiB buffer needs a bounce buffer.
+- `drivers/nvme/nvme_core.*` is a portable controller core with fake-MMIO
+  tests for reset, enable, shutdown, and fatal-status handling.
 - The controller's interrupts are delivered through AIC, which Windows sees as
   an emulated GICv2 in Phase 1.
 - Reset, power, and queue teardown must not leave the DART domain in an

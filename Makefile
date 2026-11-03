@@ -10,6 +10,8 @@ check:
 	python3 -m py_compile installer/winm_install.py tools/*.py
 	gcc -std=c11 -Wall -Wextra -Werror tests/winm_dma_test.c drivers/common/winm_dma.c drivers/nvme/nvme.c -o /tmp/winm_dma_test
 	/tmp/winm_dma_test
+	gcc -std=c11 -Wall -Wextra -Werror tests/nvme_core_test.c drivers/nvme/nvme_core.c -o /tmp/nvme_core_test
+	/tmp/nvme_core_test
 
 clean:
 	rm -rf b00t/target
