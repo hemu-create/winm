@@ -241,3 +241,154 @@ int nvme_core_identify_controller(NVME_CONTROLLER *controller,
     return nvme_core_admin_submit(controller, queue, 0x06, 0, prp1, 1, 0,
                                  command_id);
 }
+
+int nvme_core_io_queue_init(NVME_CONTROLLER *controller, NVME_IO_QUEUE *queue,
+                            volatile uint32_t *sq, volatile uint32_t *cq,
+                            uint32_t sq_depth, uint32_t cq_depth, uint32_t qid) {
+    uint32_t index;
+
+    if (controller == NULL || queue == NULL || sq == NULL || cq == NULL ||
+        !nvme_valid_depth(sq_depth) || !nvme_valid_depth(cq_depth) ||
+        qid == 0) {
+        return -1;
+    }
+
+    queue->sq = sq;
+    queue->cq = cq;
+    queue->sq_depth = sq_depth;
+    queue->cq_depth = cq_depth;
+    queue->qid = qid;
+    queue->sq_tail = 0;
+    queue->cq_head = 0;
+    queue->next_command_id = 1;
+    queue->phase = 1;
+
+    for (index = 0; index < sq_depth * 16u; index++) {
+        sq[index] = 0;
+    }
+    for (index = 0; index < cq_depth * 16u; index++) {
+        cq[index] = 0;
+    }
+
+    return 0;
+}
+
+int nvme_core_create_io_cq(NVME_CONTROLLER *controller,
+                           NVME_ADMIN_QUEUE *admin_queue, uint32_t qid,
+                           uint64_t cq_base, uint32_t cq_depth, uint16_t *cid) {
+    if (controller == NULL || admin_queue == NULL || cq_base == 0 ||
+        !nvme_valid_depth(cq_depth)) {
+        return -1;
+    }
+
+    return nvme_core_admin_submit(controller, admin_queue, 0x05, 0, cq_base,
+                                 ((qid << 16) | (cq_depth - 1)), 0x0001, cid);
+}
+
+int nvme_core_create_io_sq(NVME_CONTROLLER *controller,
+                           NVME_ADMIN_QUEUE *admin_queue, uint32_t qid,
+                           uint64_t sq_base, uint32_t sq_depth, uint32_t cq_id,
+                           uint16_t *cid) {
+    if (controller == NULL || admin_queue == NULL || sq_base == 0 ||
+        !nvme_valid_depth(sq_depth)) {
+        return -1;
+    }
+
+    return nvme_core_admin_submit(controller, admin_queue, 0x01, 0, sq_base,
+                                 ((qid << 16) | (sq_depth - 1)),
+                                 cq_id & 0xffffu, cid);
+}
+
+int nvme_core_io_submit(NVME_CONTROLLER *controller, NVME_IO_QUEUE *queue,
+                        uint8_t opcode, uint32_t nsid, uint64_t slba,
+                        uint32_t nlb, uint64_t prp1, uint16_t *command_id) {
+    uint32_t *entry;
+    uint16_t cid;
+    uint32_t tail;
+    uint32_t stride;
+    uint32_t doorbell;
+
+    if (controller == NULL || queue == NULL || queue->sq == NULL ||
+        controller->mmio.write32 == NULL || nlb == 0) {
+        return -1;
+    }
+
+    cid = queue->next_command_id;
+    if (cid == 0) {
+        cid = 1;
+    }
+    queue->next_command_id = (uint16_t)(cid + 1);
+    if (queue->next_command_id == 0) {
+        queue->next_command_id = 1;
+    }
+
+    tail = queue->sq_tail;
+    entry = (uint32_t *)(queue->sq + tail * 16u);
+
+    for (tail = 0; tail < 16u; tail++) {
+        entry[tail] = 0;
+    }
+
+    entry[0] = opcode | ((uint32_t)cid << 16);
+    entry[1] = nsid;
+    entry[6] = (uint32_t)prp1;
+    entry[7] = (uint32_t)(prp1 >> 32);
+    entry[10] = (uint32_t)slba;
+    entry[11] = (uint32_t)(slba >> 32);
+    entry[12] = nlb - 1u;
+
+    queue->sq_tail = (uint16_t)((queue->sq_tail + 1) % queue->sq_depth);
+
+    stride = (controller->doorbell_stride == 0)
+                 ? 4u
+                 : (1u << (2u + controller->doorbell_stride));
+    doorbell = NVME_REG_DBS + 2u * queue->qid * stride;
+    controller->mmio.write32(controller->mmio.context, doorbell,
+                             queue->sq_tail);
+
+    if (command_id != NULL) {
+        *command_id = cid;
+    }
+
+    return 0;
+}
+
+int nvme_core_io_poll(NVME_CONTROLLER *controller, NVME_IO_QUEUE *queue,
+                      uint16_t *command_id, uint32_t *status_code) {
+    uint32_t *entry;
+    uint32_t status;
+    uint32_t stride;
+    uint32_t doorbell;
+
+    if (controller == NULL || queue == NULL || queue->cq == NULL ||
+        controller->mmio.write32 == NULL) {
+        return -1;
+    }
+
+    entry = (uint32_t *)(queue->cq + queue->cq_head * 16u);
+    status = entry[3];
+    if (((status >> 16) & 0x1u) != queue->phase) {
+        return 0;
+    }
+
+    if (command_id != NULL) {
+        *command_id = (uint16_t)(status & 0xffffu);
+    }
+    if (status_code != NULL) {
+        *status_code = (status >> 17) & 0x7ffu;
+    }
+
+    queue->cq_head = (uint16_t)((queue->cq_head + 1) % queue->cq_depth);
+    if (queue->cq_head == 0) {
+        queue->phase ^= 1;
+    }
+
+    stride = (controller->doorbell_stride == 0)
+                 ? 4u
+                 : (1u << (2u + controller->doorbell_stride));
+    doorbell = NVME_REG_DBS + (2u * queue->qid + 1u) * stride;
+    controller->mmio.write32(controller->mmio.context, doorbell,
+                             queue->cq_head);
+
+    return 1;
+}

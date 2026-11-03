@@ -80,6 +80,18 @@ typedef struct _NVME_ADMIN_QUEUE {
     uint8_t phase;
 } NVME_ADMIN_QUEUE;
 
+typedef struct _NVME_IO_QUEUE {
+    volatile uint32_t *sq;
+    volatile uint32_t *cq;
+    uint32_t sq_depth;
+    uint32_t cq_depth;
+    uint32_t qid;
+    uint16_t sq_tail;
+    uint16_t cq_head;
+    uint16_t next_command_id;
+    uint8_t phase;
+} NVME_IO_QUEUE;
+
 int nvme_core_probe(NVME_CONTROLLER *controller, const NVME_MMIO *mmio);
 int nvme_core_wait_ready(NVME_CONTROLLER *controller, int ready);
 int nvme_core_reset(NVME_CONTROLLER *controller);
@@ -101,3 +113,19 @@ int nvme_core_admin_poll(NVME_CONTROLLER *controller,
 int nvme_core_identify_controller(NVME_CONTROLLER *controller,
                                  NVME_ADMIN_QUEUE *queue, uint64_t prp1,
                                  uint16_t *command_id);
+
+int nvme_core_io_queue_init(NVME_CONTROLLER *controller, NVME_IO_QUEUE *queue,
+                            volatile uint32_t *sq, volatile uint32_t *cq,
+                            uint32_t sq_depth, uint32_t cq_depth, uint32_t qid);
+int nvme_core_create_io_cq(NVME_CONTROLLER *controller,
+                           NVME_ADMIN_QUEUE *admin_queue, uint32_t qid,
+                           uint64_t cq_base, uint32_t cq_depth, uint16_t *cid);
+int nvme_core_create_io_sq(NVME_CONTROLLER *controller,
+                           NVME_ADMIN_QUEUE *admin_queue, uint32_t qid,
+                           uint64_t sq_base, uint32_t sq_depth, uint32_t cq_id,
+                           uint16_t *cid);
+int nvme_core_io_submit(NVME_CONTROLLER *controller, NVME_IO_QUEUE *queue,
+                        uint8_t opcode, uint32_t nsid, uint64_t slba,
+                        uint32_t nlb, uint64_t prp1, uint16_t *command_id);
+int nvme_core_io_poll(NVME_CONTROLLER *controller, NVME_IO_QUEUE *queue,
+                      uint16_t *command_id, uint32_t *status_code);
