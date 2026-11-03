@@ -32,6 +32,7 @@
     <IntDir>$(ProjectDir)obj\$(Platform)\$(Configuration)\</IntDir>
     <TargetName>winm_nvme</TargetName>
     <SkipPackageVerification>true</SkipPackageVerification>
+    <EnableInf2cat>false</EnableInf2cat>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
