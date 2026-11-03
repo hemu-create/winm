@@ -31,6 +31,7 @@
     <OutDir>$(ProjectDir)bin\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)obj\$(Platform)\$(Configuration)\</IntDir>
     <TargetName>winm_nvme</TargetName>
+    <SkipPackageVerification>true</SkipPackageVerification>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>

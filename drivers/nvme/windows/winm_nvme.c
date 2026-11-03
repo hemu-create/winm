@@ -41,8 +41,7 @@ static NTSTATUS WinMNvmeEvtDevicePrepareHardware(
             WdfCmResourceListGetDescriptor(ResourcesRaw, Index);
         if (Descriptor != NULL && Descriptor->Type == CmResourceTypeMemory) {
             DeviceContext->Bar0Length = Descriptor->u.Memory.Length;
-            DeviceContext->Bar0 = WdfDeviceMapIoSpace(
-                Device,
+            DeviceContext->Bar0 = MmMapIoSpace(
                 Descriptor->u.Memory.Start,
                 DeviceContext->Bar0Length,
                 MmNonCached);
@@ -59,8 +58,8 @@ static NTSTATUS WinMNvmeEvtDevicePrepareHardware(
     Mmio.write32 = WinMNvmeWrite32;
 
     if (nvme_core_probe(&DeviceContext->Controller, &Mmio) != 0) {
-        WdfDeviceUnmapIoSpace(Device, DeviceContext->Bar0,
-                              DeviceContext->Bar0Length);
+        MmUnmapIoSpace(DeviceContext->Bar0,
+                        DeviceContext->Bar0Length);
         DeviceContext->Bar0 = NULL;
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     }
@@ -82,8 +81,8 @@ static NTSTATUS WinMNvmeEvtDeviceReleaseHardware(
     UNREFERENCED_PARAMETER(ResourcesTranslated);
 
     if (DeviceContext->Bar0 != NULL) {
-        WdfDeviceUnmapIoSpace(Device, DeviceContext->Bar0,
-                              DeviceContext->Bar0Length);
+        MmUnmapIoSpace(DeviceContext->Bar0,
+                        DeviceContext->Bar0Length);
         DeviceContext->Bar0 = NULL;
         DeviceContext->Bar0Length = 0;
     }
