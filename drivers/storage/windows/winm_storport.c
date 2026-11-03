@@ -41,10 +41,6 @@ static BOOLEAN HwInterrupt(PVOID DeviceExtension) {
     return TRUE;
 }
 
-static VOID HwTimer(PVOID DeviceExtension) {
-    UNREFERENCED_PARAMETER(DeviceExtension);
-}
-
 NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
                     PUNICODE_STRING RegistryPath) {
     HW_INITIALIZATION_DATA InitData;
@@ -55,7 +51,6 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
     InitData.HwInitialize = HwInitialize;
     InitData.HwStartIo = HwStartIo;
     InitData.HwInterrupt = HwInterrupt;
-    InitData.HwTimer = HwTimer;
     InitData.DeviceExtensionSize = sizeof(DEVICE_EXTENSION);
     InitData.SrbExtensionSize = 0;
     InitData.NumberOfAccessRanges = 1;
@@ -65,5 +60,5 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
     InitData.AutoRequestSense = TRUE;
     InitData.MultipleRequestPerLu = TRUE;
 
-    return StorPortInitialize(DriverObject, RegistryPath, &InitData);
+    return StorPortInitialize(DriverObject, RegistryPath, &InitData, NULL);
 }
