@@ -157,7 +157,7 @@ static void WinMNvmeEvtIoDeviceControl(
     if (IoControlCode == IOCTL_WINM_NVME_IDENTIFY) {
         PWINM_NVME_IDENTIFY_RESULT Result = NULL;
         UINT16 CommandId = 0;
-        UINT32 Status = 0;
+        UINT32 AdminStatus = 0;
         ULONG Index;
         NTSTATUS NtStatus;
 
@@ -189,11 +189,11 @@ static void WinMNvmeEvtIoDeviceControl(
             }
         }
 
-        Result->Status = Status;
+        Result->Status = AdminStatus;
         Result->CommandId = CommandId;
         Result->Reserved = 0;
         WdfRequestCompleteWithInformation(
-            Request, Status == 0 ? STATUS_SUCCESS : STATUS_DEVICE_DATA_ERROR,
+            Request, AdminStatus == 0 ? STATUS_SUCCESS : STATUS_DEVICE_DATA_ERROR,
             sizeof(WINM_NVME_IDENTIFY_RESULT));
         return;
     }
