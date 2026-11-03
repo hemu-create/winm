@@ -8,6 +8,8 @@ b00t:
 check:
 	cd b00t && cargo fmt --check && cargo clippy --release -- -D warnings
 	python3 -m py_compile installer/winm_install.py tools/*.py
+	gcc -std=c11 -Wall -Wextra -Werror tests/winm_dma_test.c drivers/common/winm_dma.c drivers/nvme/nvme.c -o /tmp/winm_dma_test
+	/tmp/winm_dma_test
 
 clean:
 	rm -rf b00t/target

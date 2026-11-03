@@ -14,6 +14,8 @@ service.
 - DART uses a 16 KiB granule.
 - Windows uses 4 KiB pages.
 - PRP lists and DMA buffers must respect the DART granule.
+- The shared `drivers/common/winm_dma.*` helpers provide 16 KiB-aligned
+  allocations and detect when a Windows 4 KiB buffer needs a bounce buffer.
 - The controller's interrupts are delivered through AIC, which Windows sees as
   an emulated GICv2 in Phase 1.
 - Reset, power, and queue teardown must not leave the DART domain in an

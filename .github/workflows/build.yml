@@ -27,6 +27,10 @@ jobs:
           cargo clippy --release -- -D warnings
       - name: Check Python
         run: python3 -m compileall installer tools
+      - name: Check 16 KiB DMA helpers
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror tests/winm_dma_test.c drivers/common/winm_dma.c drivers/nvme/nvme.c -o /tmp/winm_dma_test
+          /tmp/winm_dma_test
       - name: Upload b00t image
         uses: actions/upload-artifact@v4
         with:

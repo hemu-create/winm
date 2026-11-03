@@ -18,19 +18,29 @@ void nvme_free_dma_buffer(uint64_t address, uint32_t size) {
 }
 
 int nvme_map_prp(NVME_PRP *prp, uint64_t buffer, uint32_t size) {
-    if (prp == NULL || size == 0 || !dart_aligned(buffer, size)) {
+    if (prp == NULL || buffer == 0 || size == 0) {
         return -1;
     }
 
-    /*
-     * A single 4 KiB PRP page can describe up to one 4 KiB region. For
-     * 16 KiB-aligned buffers, use PRP1 for the first 4 KiB and a PRP list
-     * page for the remainder. This is a placeholder for the real PRP logic.
-     */
-    prp->pages[0] = buffer;
-    prp->pages[1] = 0;
-    prp->count = 1;
-    return 0;
+    if ((buffer & WINM_CPU_PAGE_MASK) != 0) {
+        return -1;
+    }
+
+    if (size <= NVME_PAGE_SIZE) {
+        prp->pages[0] = buffer;
+        prp->pages[1] = 0;
+        prp->count = 1;
+        return 0;
+    }
+
+    if (size <= (2 * NVME_PAGE_SIZE)) {
+        prp->pages[0] = buffer;
+        prp->pages[1] = buffer + NVME_PAGE_SIZE;
+        prp->count = 2;
+        return 0;
+    }
+
+    return -1;
 }
 
 int nvme_submit_admin_command(NVME_QUEUE_PAIR *qp, uint32_t opcode,

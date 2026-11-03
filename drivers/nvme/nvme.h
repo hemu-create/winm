@@ -2,9 +2,11 @@
 
 #include <stdint.h>
 
-#define NVME_PAGE_SIZE 4096
-#define DART_GRANULE 16384
-#define DART_GRANULE_MASK (DART_GRANULE - 1)
+#include "../common/winm_dma.h"
+
+#define NVME_PAGE_SIZE WINM_CPU_PAGE_SIZE
+#define DART_GRANULE WINM_DART_GRANULE
+#define DART_GRANULE_MASK WINM_DART_GRANULE_MASK
 
 typedef struct _NVME_QUEUE_PAIR {
     uint64_t sq_base;
