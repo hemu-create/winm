@@ -52,3 +52,32 @@ jobs:
             cl /nologo /W4 /c $file.FullName /Fo"$env:TEMP\$($file.BaseName).obj"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+
+  wdk-driver:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build WinM NVMe KMDF driver
+        shell: pwsh
+        run: |
+          $wdk = "C:\Program Files (x86)\Windows Kits\10"
+          if (!(Test-Path "$wdk\build\WindowsDriver.Common.targets")) {
+            choco install windowsdriverkit -y --no-progress
+          }
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
+          if (!$msbuild) { throw "MSBuild not found" }
+          & $msbuild drivers\nvme\windows\winm_nvme.vcxproj `
+            /p:Configuration=Release `
+            /p:Platform=ARM64 `
+            /p:WDKContentRoot="$wdk\" `
+            /m
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload WinM NVMe driver
+        uses: actions/upload-artifact@v4
+        with:
+          name: winm-nvme-driver
+          path: |
+            drivers/nvme/windows/bin/ARM64/Release/**/*.sys
+            drivers/nvme/windows/bin/ARM64/Release/**/*.inf
+            drivers/nvme/windows/bin/ARM64/Release/**/*.cat
