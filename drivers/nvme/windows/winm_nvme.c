@@ -184,7 +184,7 @@ static void WinMNvmeEvtIoDeviceControl(
         for (Index = 0; Index < 1000000; Index++) {
             if (nvme_core_admin_poll(&DeviceContext->Controller,
                                      &DeviceContext->AdminQueue, &CommandId,
-                                     &Status) != 0) {
+                                     &AdminStatus) != 0) {
                 break;
             }
         }
