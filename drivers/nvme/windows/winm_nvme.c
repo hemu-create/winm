@@ -6,8 +6,11 @@
 
 typedef struct _DEVICE_CONTEXT {
     NVME_CONTROLLER Controller;
+    NVME_ADMIN_QUEUE AdminQueue;
     PVOID Bar0;
     SIZE_T Bar0Length;
+    PVOID AdminQueueRaw;
+    SIZE_T AdminQueueRawSize;
 } DEVICE_CONTEXT, *PDEVICE_CONTEXT;
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(DEVICE_CONTEXT, WinMNvmeGetContext)
@@ -51,6 +54,39 @@ static NTSTATUS WinMNvmeEvtDevicePrepareHardware(
 
     if (DeviceContext->Bar0 == NULL) {
         return STATUS_DEVICE_CONFIGURATION_ERROR;
+    }
+
+    DeviceContext->AdminQueueRawSize =
+        (2 * NVME_ADMIN_SQ_ENTRY_DWORDS + 2 * NVME_ADMIN_CQ_ENTRY_DWORDS) *
+        sizeof(UINT32) + WINM_DART_GRANULE;
+    DeviceContext->AdminQueueRaw = ExAllocatePool2(
+        NonPagedPoolNx, DeviceContext->AdminQueueRawSize, 'vMnW');
+    if (DeviceContext->AdminQueueRaw == NULL) {
+        WdfDeviceUnmapIoSpace(Device, DeviceContext->Bar0,
+                              DeviceContext->Bar0Length);
+        DeviceContext->Bar0 = NULL;
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    {
+        PVOID Aligned = (PVOID)(((ULONG_PTR)DeviceContext->AdminQueueRaw +
+                                 (WINM_DART_GRANULE - 1)) &
+                                ~((ULONG_PTR)WINM_DART_GRANULE - 1));
+        volatile UINT32 *SubmissionQueue = (volatile UINT32 *)Aligned;
+        volatile UINT32 *CompletionQueue =
+            SubmissionQueue + (2 * NVME_ADMIN_SQ_ENTRY_DWORDS);
+
+        if (nvme_core_admin_queue_init(&DeviceContext->Controller,
+                                       &DeviceContext->AdminQueue,
+                                       SubmissionQueue, CompletionQueue, 2,
+                                       2) != 0) {
+            ExFreePool(DeviceContext->AdminQueueRaw);
+            DeviceContext->AdminQueueRaw = NULL;
+            WdfDeviceUnmapIoSpace(Device, DeviceContext->Bar0,
+                                  DeviceContext->Bar0Length);
+            DeviceContext->Bar0 = NULL;
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        }
     }
 
     Mmio.context = DeviceContext;
@@ -158,8 +194,12 @@ static NTSTATUS WinMNvmeEvtDeviceAdd(
     DeviceContext = WinMNvmeGetContext(Device);
     DeviceContext->Bar0 = NULL;
     DeviceContext->Bar0Length = 0;
+    DeviceContext->AdminQueueRaw = NULL;
+    DeviceContext->AdminQueueRawSize = 0;
     RtlZeroMemory(&DeviceContext->Controller,
                   sizeof(DeviceContext->Controller));
+    RtlZeroMemory(&DeviceContext->AdminQueue,
+                  sizeof(DeviceContext->AdminQueue));
 
     WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(
         &QueueConfig, WdfIoQueueDispatchSequential);
