@@ -62,8 +62,8 @@ static NTSTATUS WinMNvmeEvtDevicePrepareHardware(
     DeviceContext->AdminQueueRaw = ExAllocatePool2(
         NonPagedPoolNx, DeviceContext->AdminQueueRawSize, 'vMnW');
     if (DeviceContext->AdminQueueRaw == NULL) {
-        WdfDeviceUnmapIoSpace(Device, DeviceContext->Bar0,
-                              DeviceContext->Bar0Length);
+        MmUnmapIoSpace(DeviceContext->Bar0,
+                        DeviceContext->Bar0Length);
         DeviceContext->Bar0 = NULL;
         return STATUS_INSUFFICIENT_RESOURCES;
     }
@@ -82,8 +82,8 @@ static NTSTATUS WinMNvmeEvtDevicePrepareHardware(
                                        2) != 0) {
             ExFreePool(DeviceContext->AdminQueueRaw);
             DeviceContext->AdminQueueRaw = NULL;
-            WdfDeviceUnmapIoSpace(Device, DeviceContext->Bar0,
-                                  DeviceContext->Bar0Length);
+            MmUnmapIoSpace(DeviceContext->Bar0,
+                            DeviceContext->Bar0Length);
             DeviceContext->Bar0 = NULL;
             return STATUS_DEVICE_CONFIGURATION_ERROR;
         }
