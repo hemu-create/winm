@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stddef.h>
+#include "../common/apple_registers.h"
 
 typedef struct {
     uintptr_t dwc3_base;
@@ -25,4 +26,18 @@ int usb_set_role(usb_context_t *context, uint32_t role) {
 
     context->role = role;
     return 0;
+}
+
+uint32_t usb_core_id(usb_context_t *context) {
+    if (context == NULL || context->dwc3_base == 0) {
+        return 0;
+    }
+    return *(volatile uint32_t *)(context->dwc3_base + DWC3_GSNPSID);
+}
+
+uint32_t usb_status(usb_context_t *context) {
+    if (context == NULL || context->dwc3_base == 0) {
+        return 0;
+    }
+    return *(volatile uint32_t *)(context->dwc3_base + DWC3_GSTS);
 }

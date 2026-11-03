@@ -62,3 +62,12 @@
 #define PCIE_PORT_STATUS 0x00804u
 #define PCIE_PORT_REFCLK 0x00810u
 #define PCIE_PORT_PERST 0x00814u
+
+#define DWC3_GSBUSCFG0 0xc100u
+#define DWC3_GSBUSCFG1 0xc104u
+#define DWC3_GCTL 0xc110u
+#define DWC3_GSTS 0xc118u
+#define DWC3_GSNPSID 0xc120u
+#define DWC3_GGPIO 0xc124u
+#define DWC3_GUID 0xc128u
+#define DWC3_GUCTL 0xc12cu
