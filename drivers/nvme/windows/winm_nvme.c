@@ -11,6 +11,8 @@ typedef struct _DEVICE_CONTEXT {
     SIZE_T Bar0Length;
     PVOID AdminQueueRaw;
     SIZE_T AdminQueueRawSize;
+    PVOID IdentifyBufferRaw;
+    PVOID IdentifyBuffer;
 } DEVICE_CONTEXT, *PDEVICE_CONTEXT;
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(DEVICE_CONTEXT, WinMNvmeGetContext)
@@ -89,6 +91,20 @@ static NTSTATUS WinMNvmeEvtDevicePrepareHardware(
         }
     }
 
+    DeviceContext->IdentifyBufferRaw = ExAllocatePool2(
+        NonPagedPoolNx, 4096 + WINM_DART_GRANULE, 'IvMn');
+    if (DeviceContext->IdentifyBufferRaw == NULL) {
+        ExFreePool(DeviceContext->AdminQueueRaw);
+        DeviceContext->AdminQueueRaw = NULL;
+        MmUnmapIoSpace(DeviceContext->Bar0, DeviceContext->Bar0Length);
+        DeviceContext->Bar0 = NULL;
+        DeviceContext->Bar0Length = 0;
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    DeviceContext->IdentifyBuffer = (PVOID)(((ULONG_PTR)DeviceContext->IdentifyBufferRaw +
+                                             (WINM_DART_GRANULE - 1)) &
+                                            ~((ULONG_PTR)WINM_DART_GRANULE - 1));
+
     Mmio.context = DeviceContext;
     Mmio.read32 = WinMNvmeRead32;
     Mmio.write32 = WinMNvmeWrite32;
@@ -137,6 +153,50 @@ static void WinMNvmeEvtIoDeviceControl(
     NTSTATUS Status;
 
     UNREFERENCED_PARAMETER(InputBufferLength);
+
+    if (IoControlCode == IOCTL_WINM_NVME_IDENTIFY) {
+        PWINM_NVME_IDENTIFY_RESULT Result = NULL;
+        UINT16 CommandId = 0;
+        UINT32 Status = 0;
+        ULONG Index;
+        NTSTATUS NtStatus;
+
+        if (OutputBufferLength < sizeof(WINM_NVME_IDENTIFY_RESULT)) {
+            WdfRequestComplete(Request, STATUS_BUFFER_TOO_SMALL);
+            return;
+        }
+
+        NtStatus = WdfRequestRetrieveOutputBuffer(
+            Request, sizeof(WINM_NVME_IDENTIFY_RESULT), (PVOID *)&Result, NULL);
+        if (!NT_SUCCESS(NtStatus)) {
+            WdfRequestComplete(Request, NtStatus);
+            return;
+        }
+
+        if (nvme_core_identify_controller(&DeviceContext->Controller,
+                                          &DeviceContext->AdminQueue,
+                                          (UINT64)(ULONG_PTR)DeviceContext->IdentifyBuffer,
+                                          &CommandId) != 0) {
+            WdfRequestComplete(Request, STATUS_DEVICE_CONFIGURATION_ERROR);
+            return;
+        }
+
+        for (Index = 0; Index < 1000000; Index++) {
+            if (nvme_core_admin_poll(&DeviceContext->Controller,
+                                     &DeviceContext->AdminQueue, &CommandId,
+                                     &Status) != 0) {
+                break;
+            }
+        }
+
+        Result->Status = Status;
+        Result->CommandId = CommandId;
+        Result->Reserved = 0;
+        WdfRequestCompleteWithInformation(
+            Request, Status == 0 ? STATUS_SUCCESS : STATUS_DEVICE_DATA_ERROR,
+            sizeof(WINM_NVME_IDENTIFY_RESULT));
+        return;
+    }
 
     if (IoControlCode != IOCTL_WINM_NVME_GET_INFO) {
         WdfRequestComplete(Request, STATUS_INVALID_DEVICE_REQUEST);
@@ -196,6 +256,8 @@ static NTSTATUS WinMNvmeEvtDeviceAdd(
     DeviceContext->Bar0Length = 0;
     DeviceContext->AdminQueueRaw = NULL;
     DeviceContext->AdminQueueRawSize = 0;
+    DeviceContext->IdentifyBufferRaw = NULL;
+    DeviceContext->IdentifyBuffer = NULL;
     RtlZeroMemory(&DeviceContext->Controller,
                   sizeof(DeviceContext->Controller));
     RtlZeroMemory(&DeviceContext->AdminQueue,
