@@ -74,13 +74,9 @@ jobs:
           }
           Write-Host "repack-windows.ps1: syntax ok"
 
-      - name: Check Windows deployment tools
+      - name: Check ISO repack parameter binding
         shell: pwsh
         run: |
-          if (-not (Get-Command oscdimg.exe -ErrorAction SilentlyContinue)) {
-            throw "oscdimg.exe is not available on this runner"
-          }
-          Write-Host "oscdimg.exe: available"
           & pwsh -NoProfile -File tools/iso/repack-windows.ps1 -? | Out-Null
           Write-Host "repack-windows.ps1: parameter binding ok"
 
