@@ -74,6 +74,16 @@ jobs:
           }
           Write-Host "repack-windows.ps1: syntax ok"
 
+      - name: Check Windows deployment tools
+        shell: pwsh
+        run: |
+          if (-not (Get-Command oscdimg.exe -ErrorAction SilentlyContinue)) {
+            throw "oscdimg.exe is not available on this runner"
+          }
+          Write-Host "oscdimg.exe: available"
+          & pwsh -NoProfile -File tools/iso/repack-windows.ps1 -? | Out-Null
+          Write-Host "repack-windows.ps1: parameter binding ok"
+
   wdk-driver:
     runs-on: windows-2025-vs2026
     steps:
